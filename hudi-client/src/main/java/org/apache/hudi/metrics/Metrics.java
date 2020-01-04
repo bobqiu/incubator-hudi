@@ -18,20 +18,22 @@
 
 package org.apache.hudi.metrics;
 
+import org.apache.hudi.config.HoodieWriteConfig;
+import org.apache.hudi.exception.HoodieException;
+
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.io.Closeables;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Closeable;
-import org.apache.hudi.config.HoodieWriteConfig;
-import org.apache.hudi.exception.HoodieException;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
 
 /**
  * This is the main class of the metrics system.
  */
 public class Metrics {
-  private static Logger logger = LogManager.getLogger(Metrics.class);
+  private static final Logger LOG = LoggerFactory.getLogger(Metrics.class);
 
   private static volatile boolean initialized = false;
   private static Metrics metrics = null;
@@ -85,7 +87,7 @@ public class Metrics {
       // Here we catch all exception, so the major upsert pipeline will not be affected if the
       // metrics system
       // has some issues.
-      logger.error("Failed to send metrics: ", e);
+      LOG.error("Failed to send metrics: ", e);
     }
   }
 

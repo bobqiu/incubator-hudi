@@ -18,19 +18,6 @@
 
 package org.apache.hudi.cli.commands;
 
-import java.io.IOException;
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiPredicate;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hudi.cli.HoodieCLI;
 import org.apache.hudi.cli.HoodiePrintHelper;
 import org.apache.hudi.cli.TableHeader;
@@ -42,11 +29,29 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 import org.apache.hudi.common.util.NumericUtils;
 import org.apache.hudi.common.util.Option;
+
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.springframework.shell.core.CommandMarker;
 import org.springframework.shell.core.annotation.CliCommand;
 import org.springframework.shell.core.annotation.CliOption;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.BiPredicate;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+/**
+ * CLI command to display file system options.
+ */
 @Component
 public class FileSystemViewCommand implements CommandMarker {
 
@@ -136,7 +141,7 @@ public class FileSystemViewCommand implements CommandMarker {
       fileSliceStream = fsView.getLatestFileSlices(partition);
     } else {
       if (maxInstant.isEmpty()) {
-        maxInstant = HoodieCLI.tableMetadata.getActiveTimeline().filterCompletedAndCompactionInstants().lastInstant()
+        maxInstant = HoodieCLI.getTableMetaClient().getActiveTimeline().filterCompletedAndCompactionInstants().lastInstant()
             .get().getTimestamp();
       }
       fileSliceStream = fsView.getLatestMergedFileSlicesBeforeOrOn(partition, maxInstant);
@@ -206,7 +211,7 @@ public class FileSystemViewCommand implements CommandMarker {
   }
 
   /**
-   * Build File System View
+   * Build File System View.
    * 
    * @param globRegex Path Regex
    * @param maxInstant Max Instants to be used for displaying file-instants
@@ -219,10 +224,11 @@ public class FileSystemViewCommand implements CommandMarker {
    */
   private HoodieTableFileSystemView buildFileSystemView(String globRegex, String maxInstant, boolean readOptimizedOnly,
       boolean includeMaxInstant, boolean includeInflight, boolean excludeCompaction) throws IOException {
+    HoodieTableMetaClient client = HoodieCLI.getTableMetaClient();
     HoodieTableMetaClient metaClient =
-        new HoodieTableMetaClient(HoodieCLI.tableMetadata.getHadoopConf(), HoodieCLI.tableMetadata.getBasePath(), true);
+        new HoodieTableMetaClient(client.getHadoopConf(), client.getBasePath(), true);
     FileSystem fs = HoodieCLI.fs;
-    String globPath = String.format("%s/%s/*", HoodieCLI.tableMetadata.getBasePath(), globRegex);
+    String globPath = String.format("%s/%s/*", client.getBasePath(), globRegex);
     FileStatus[] statuses = fs.globStatus(new Path(globPath));
     Stream<HoodieInstant> instantsStream = null;
 

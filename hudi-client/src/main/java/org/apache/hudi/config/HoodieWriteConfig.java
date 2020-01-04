@@ -18,39 +18,45 @@
 
 package org.apache.hudi.config;
 
-import com.google.common.base.Preconditions;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Map;
-import java.util.Properties;
-import javax.annotation.concurrent.Immutable;
 import org.apache.hudi.HoodieWriteClient;
 import org.apache.hudi.WriteStatus;
 import org.apache.hudi.common.model.HoodieCleaningPolicy;
+import org.apache.hudi.common.model.TimelineLayoutVersion;
 import org.apache.hudi.common.table.view.FileSystemViewStorageConfig;
 import org.apache.hudi.common.util.ConsistencyGuardConfig;
 import org.apache.hudi.common.util.ReflectionUtils;
 import org.apache.hudi.index.HoodieIndex;
 import org.apache.hudi.io.compact.strategy.CompactionStrategy;
 import org.apache.hudi.metrics.MetricsReporterType;
+
+import com.google.common.base.Preconditions;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.spark.storage.StorageLevel;
 
+import javax.annotation.concurrent.Immutable;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Map;
+import java.util.Properties;
+
 /**
- * Class storing configs for the {@link HoodieWriteClient}
+ * Class storing configs for the {@link HoodieWriteClient}.
  */
 @Immutable
 public class HoodieWriteConfig extends DefaultHoodieConfig {
 
   public static final String TABLE_NAME = "hoodie.table.name";
+  private static final String TIMELINE_LAYOUT_VERSION = "hoodie.timeline.layout.version";
   private static final String BASE_PATH_PROP = "hoodie.base.path";
   private static final String AVRO_SCHEMA = "hoodie.avro.schema";
   private static final String DEFAULT_PARALLELISM = "1500";
   private static final String INSERT_PARALLELISM = "hoodie.insert.shuffle.parallelism";
   private static final String BULKINSERT_PARALLELISM = "hoodie.bulkinsert.shuffle.parallelism";
   private static final String UPSERT_PARALLELISM = "hoodie.upsert.shuffle.parallelism";
+  private static final String DELETE_PARALLELISM = "hoodie.delete.shuffle.parallelism";
   private static final String DEFAULT_ROLLBACK_PARALLELISM = "100";
   private static final String ROLLBACK_PARALLELISM = "hoodie.rollback.parallelism";
   private static final String WRITE_BUFFER_LIMIT_BYTES = "hoodie.write.buffer.limit.bytes";
@@ -59,11 +65,13 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
   private static final String DEFAULT_COMBINE_BEFORE_INSERT = "false";
   private static final String COMBINE_BEFORE_UPSERT_PROP = "hoodie.combine.before.upsert";
   private static final String DEFAULT_COMBINE_BEFORE_UPSERT = "true";
+  private static final String COMBINE_BEFORE_DELETE_PROP = "hoodie.combine.before.delete";
+  private static final String DEFAULT_COMBINE_BEFORE_DELETE = "true";
   private static final String WRITE_STATUS_STORAGE_LEVEL = "hoodie.write.status.storage.level";
   private static final String DEFAULT_WRITE_STATUS_STORAGE_LEVEL = "MEMORY_AND_DISK_SER";
   private static final String HOODIE_AUTO_COMMIT_PROP = "hoodie.auto.commit";
   private static final String DEFAULT_HOODIE_AUTO_COMMIT = "true";
-  private static final String HOODIE_ASSUME_DATE_PARTITIONING_PROP = "hoodie.assume.date" + ".partitioning";
+  private static final String HOODIE_ASSUME_DATE_PARTITIONING_PROP = "hoodie.assume.date.partitioning";
   private static final String DEFAULT_ASSUME_DATE_PARTITIONING = "false";
   private static final String HOODIE_WRITE_STATUS_CLASS_PROP = "hoodie.writestatus.class";
   private static final String DEFAULT_HOODIE_WRITE_STATUS_CLASS = WriteStatus.class.getName();
@@ -88,6 +96,7 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
   private static final String MAX_CONSISTENCY_CHECKS_PROP = "hoodie.consistency.check.max_checks";
   private static int DEFAULT_MAX_CONSISTENCY_CHECKS = 7;
 
+
   private ConsistencyGuardConfig consistencyGuardConfig;
 
   // Hoodie Write Client transparently rewrites File System View config when embedded mode is enabled
@@ -109,14 +118,18 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
   }
 
   /**
-   * base properties
-   **/
+   * base properties.
+   */
   public String getBasePath() {
     return props.getProperty(BASE_PATH_PROP);
   }
 
   public String getSchema() {
     return props.getProperty(AVRO_SCHEMA);
+  }
+
+  public void setSchema(String schemaStr) {
+    props.setProperty(AVRO_SCHEMA, schemaStr);
   }
 
   public String getTableName() {
@@ -131,6 +144,10 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
     return Boolean.parseBoolean(props.getProperty(HOODIE_ASSUME_DATE_PARTITIONING_PROP));
   }
 
+  public Integer getTimelineLayoutVersion() {
+    return Integer.parseInt(props.getProperty(TIMELINE_LAYOUT_VERSION));
+  }
+
   public int getBulkInsertShuffleParallelism() {
     return Integer.parseInt(props.getProperty(BULKINSERT_PARALLELISM));
   }
@@ -143,10 +160,13 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
     return Integer.parseInt(props.getProperty(UPSERT_PARALLELISM));
   }
 
+  public int getDeleteShuffleParallelism() {
+    return Integer.parseInt(props.getProperty(DELETE_PARALLELISM));
+  }
+
   public int getRollbackParallelism() {
     return Integer.parseInt(props.getProperty(ROLLBACK_PARALLELISM));
   }
-
 
   public int getWriteBufferLimitBytes() {
     return Integer.parseInt(props.getProperty(WRITE_BUFFER_LIMIT_BYTES, DEFAULT_WRITE_BUFFER_LIMIT_BYTES));
@@ -158,6 +178,10 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
 
   public boolean shouldCombineBeforeUpsert() {
     return Boolean.parseBoolean(props.getProperty(COMBINE_BEFORE_UPSERT_PROP));
+  }
+
+  public boolean shouldCombineBeforeDelete() {
+    return Boolean.parseBoolean(props.getProperty(COMBINE_BEFORE_DELETE_PROP));
   }
 
   public StorageLevel getWriteStatusStorageLevel() {
@@ -193,8 +217,8 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
   }
 
   /**
-   * compaction properties
-   **/
+   * compaction properties.
+   */
   public HoodieCleaningPolicy getCleanerPolicy() {
     return HoodieCleaningPolicy.valueOf(props.getProperty(HoodieCompactionConfig.CLEANER_POLICY_PROP));
   }
@@ -280,8 +304,8 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
   }
 
   /**
-   * index properties
-   **/
+   * index properties.
+   */
   public HoodieIndex.IndexType getIndexType() {
     return HoodieIndex.IndexType.valueOf(props.getProperty(HoodieIndexConfig.INDEX_TYPE_PROP));
   }
@@ -346,6 +370,14 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
     return Integer.valueOf(props.getProperty(HoodieHBaseIndexConfig.HOODIE_INDEX_DESIRED_PUTS_TIME_IN_SECS));
   }
 
+  public String getBloomFilterType() {
+    return props.getProperty(HoodieIndexConfig.BLOOM_INDEX_FILTER_TYPE);
+  }
+
+  public int getDynamicBloomFilterMaxNumEntries() {
+    return Integer.parseInt(props.getProperty(HoodieIndexConfig.HOODIE_BLOOM_INDEX_FILTER_DYNAMIC_MAX_ENTRIES));
+  }
+
   /**
    * Fraction of the global share of QPS that should be allocated to this job. Let's say there are 3 jobs which have
    * input size in terms of number of rows required for HbaseIndexing as x, 2x, 3x respectively. Then this fraction for
@@ -400,8 +432,8 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
   }
 
   /**
-   * storage properties
-   **/
+   * storage properties.
+   */
   public long getParquetMaxFileSize() {
     return Long.parseLong(props.getProperty(HoodieStorageConfig.PARQUET_FILE_MAX_BYTES));
   }
@@ -435,8 +467,8 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
   }
 
   /**
-   * metrics properties
-   **/
+   * metrics properties.
+   */
   public boolean isMetricsOn() {
     return Boolean.parseBoolean(props.getProperty(HoodieMetricsConfig.METRICS_ON));
   }
@@ -457,8 +489,16 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
     return props.getProperty(HoodieMetricsConfig.GRAPHITE_METRIC_PREFIX);
   }
 
+  public String getJmxHost() {
+    return props.getProperty(HoodieMetricsConfig.JMX_HOST);
+  }
+
+  public int getJmxPort() {
+    return Integer.parseInt(props.getProperty(HoodieMetricsConfig.JMX_PORT));
+  }
+
   /**
-   * memory configs
+   * memory configs.
    */
   public Double getMaxMemoryFractionPerPartitionMerge() {
     return Double.valueOf(props.getProperty(HoodieMemoryConfig.MAX_MEMORY_FRACTION_FOR_MERGE_PROP));
@@ -559,6 +599,11 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
 
     public Builder forTable(String tableName) {
       props.setProperty(TABLE_NAME, tableName);
+      return this;
+    }
+
+    public Builder withTimelineLayoutVersion(int version) {
+      props.setProperty(TIMELINE_LAYOUT_VERSION, String.valueOf(version));
       return this;
     }
 
@@ -667,11 +712,15 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
       setDefaultOnCondition(props, !props.containsKey(BULKINSERT_PARALLELISM), BULKINSERT_PARALLELISM,
           DEFAULT_PARALLELISM);
       setDefaultOnCondition(props, !props.containsKey(UPSERT_PARALLELISM), UPSERT_PARALLELISM, DEFAULT_PARALLELISM);
-      setDefaultOnCondition(props, !props.containsKey(ROLLBACK_PARALLELISM), ROLLBACK_PARALLELISM, DEFAULT_PARALLELISM);
+      setDefaultOnCondition(props, !props.containsKey(DELETE_PARALLELISM), DELETE_PARALLELISM, DEFAULT_PARALLELISM);
+      setDefaultOnCondition(props, !props.containsKey(ROLLBACK_PARALLELISM), ROLLBACK_PARALLELISM,
+          DEFAULT_ROLLBACK_PARALLELISM);
       setDefaultOnCondition(props, !props.containsKey(COMBINE_BEFORE_INSERT_PROP), COMBINE_BEFORE_INSERT_PROP,
           DEFAULT_COMBINE_BEFORE_INSERT);
       setDefaultOnCondition(props, !props.containsKey(COMBINE_BEFORE_UPSERT_PROP), COMBINE_BEFORE_UPSERT_PROP,
           DEFAULT_COMBINE_BEFORE_UPSERT);
+      setDefaultOnCondition(props, !props.containsKey(COMBINE_BEFORE_DELETE_PROP), COMBINE_BEFORE_DELETE_PROP,
+          DEFAULT_COMBINE_BEFORE_DELETE);
       setDefaultOnCondition(props, !props.containsKey(WRITE_STATUS_STORAGE_LEVEL), WRITE_STATUS_STORAGE_LEVEL,
           DEFAULT_WRITE_STATUS_STORAGE_LEVEL);
       setDefaultOnCondition(props, !props.containsKey(HOODIE_AUTO_COMMIT_PROP), HOODIE_AUTO_COMMIT_PROP,
@@ -704,6 +753,12 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
           FileSystemViewStorageConfig.newBuilder().fromProperties(props).build());
       setDefaultOnCondition(props, !isConsistencyGuardSet,
           ConsistencyGuardConfig.newBuilder().fromProperties(props).build());
+
+      setDefaultOnCondition(props, !props.containsKey(TIMELINE_LAYOUT_VERSION), TIMELINE_LAYOUT_VERSION,
+          String.valueOf(TimelineLayoutVersion.CURR_VERSION));
+      String layoutVersion = props.getProperty(TIMELINE_LAYOUT_VERSION);
+      // Ensure Layout Version is good
+      new TimelineLayoutVersion(Integer.parseInt(layoutVersion));
 
       // Build WriteConfig at the end
       HoodieWriteConfig config = new HoodieWriteConfig(props);
